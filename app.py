@@ -1520,10 +1520,7 @@ def build_job_inputs(
             }
         )
     combos = build_result_combinations(orig_bgr, regions, top_n=top_n)
-    best_combo = combos[0] if combos else None
     payload = build_result_payload(job_label, targets, regions, combos)
-    html = build_result_html(job_label, orig_bgr, targets, combos) if combos else ""
-    psd_bytes = create_layered_psd_bytes(job_label, orig_bgr, best_combo, targets, regions) if best_combo else b""
     return {
         "job_label": job_label,
         "orig_bgr": orig_bgr,
@@ -1531,8 +1528,8 @@ def build_job_inputs(
         "regions": regions,
         "combos": combos,
         "payload": payload,
-        "html": html,
-        "psd_bytes": psd_bytes,
+        "html": "",
+        "psd_bytes": b"",
     }
 
 
@@ -1780,17 +1777,20 @@ def render_result_downloads(result: dict[str, Any]) -> None:
     with st.expander("准备高级导出（PSD / ZIP / HTML）", expanded=export_state is None):
         if export_state is None:
             if st.button("生成高级导出文件", key=f"prepare_advanced_exports_{slugify(result['job_label'])}", use_container_width=True):
-                with st.spinner("正在准备高级导出文件，这一步会更慢，也更吃内存..."):
-                    html = build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
-                    psd_bytes = create_layered_psd_bytes(result["job_label"], result["orig_bgr"], result["combos"][0], result["targets"], result["regions"])
-                    advanced_result = {**result, "html": html, "psd_bytes": psd_bytes}
-                    zip_bytes = build_export_zip(advanced_result)
-                st.session_state[export_state_key] = {
-                    "html_bytes": html.encode("utf-8"),
-                    "psd_bytes": psd_bytes,
-                    "zip_bytes": zip_bytes,
-                }
-                st.rerun()
+                try:
+                    with st.spinner("正在准备高级导出文件，这一步会更慢，也更吃内存..."):
+                        html = build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
+                        psd_bytes = create_layered_psd_bytes(result["job_label"], result["orig_bgr"], result["combos"][0], result["targets"], result["regions"])
+                        advanced_result = {**result, "html": html, "psd_bytes": psd_bytes}
+                        zip_bytes = build_export_zip(advanced_result)
+                    st.session_state[export_state_key] = {
+                        "html_bytes": html.encode("utf-8"),
+                        "psd_bytes": psd_bytes,
+                        "zip_bytes": zip_bytes,
+                    }
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"高级导出生成失败：{exc}")
         else:
             st.success("高级导出文件已经准备好，可以直接下载。")
 
