@@ -1387,6 +1387,8 @@ def build_export_zip(result: dict[str, Any]) -> bytes:
     if not result["combos"]:
         return b""
     best = result["combos"][0]
+    html_text = result.get("html") or build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
+    psd_bytes = result.get("psd_bytes") or b""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         base = slugify(result["job_label"])
@@ -1394,8 +1396,9 @@ def build_export_zip(result: dict[str, Any]) -> bytes:
             f"{base}/best.jpg",
             image_to_bytes(best["image"], ".jpg", [int(cv2.IMWRITE_JPEG_QUALITY), 100]),
         )
-        zf.writestr(f"{base}/best.psd", result["psd_bytes"])
-        zf.writestr(f"{base}/report.html", result["html"].encode("utf-8"))
+        if psd_bytes:
+            zf.writestr(f"{base}/best.psd", psd_bytes)
+        zf.writestr(f"{base}/report.html", html_text.encode("utf-8"))
         zf.writestr(
             f"{base}/report.json",
             json.dumps(result["payload"], ensure_ascii=False, indent=2).encode("utf-8"),
@@ -1750,6 +1753,8 @@ def render_result_downloads(result: dict[str, Any]) -> None:
     best = result["combos"][0]
     jpg_bytes = image_to_bytes(best["image"], ".jpg", [int(cv2.IMWRITE_JPEG_QUALITY), 96])
     json_bytes = json.dumps(result["payload"], ensure_ascii=False, indent=2).encode("utf-8")
+    basic_html = result.get("html") or build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
+    basic_zip_bytes = build_export_zip({**result, "html": basic_html, "psd_bytes": result.get("psd_bytes") or b""})
     export_state_key = f"stable_advanced_exports::{result['job_label']}"
     export_state = st.session_state.get(export_state_key)
 
@@ -1762,15 +1767,13 @@ def render_result_downloads(result: dict[str, Any]) -> None:
         else:
             st.button("下载分层 PSD", disabled=True, use_container_width=True, key=f"disabled_psd_{slugify(result['job_label'])}")
     with cols[2]:
-        if export_state:
-            st.download_button("下载导出包 ZIP", export_state["zip_bytes"], file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True)
-        else:
-            st.button("下载导出包 ZIP", disabled=True, use_container_width=True, key=f"disabled_zip_{slugify(result['job_label'])}")
+        zip_bytes = export_state["zip_bytes"] if export_state else basic_zip_bytes
+        st.download_button("下载导出包 ZIP", zip_bytes, file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True)
     with cols[3]:
         if export_state:
             st.download_button("下载报告 HTML", export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True)
         else:
-            st.button("下载报告 HTML", disabled=True, use_container_width=True, key=f"disabled_html_{slugify(result['job_label'])}")
+            st.download_button("下载报告 HTML", basic_html.encode("utf-8"), file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True)
     with cols[4]:
         st.download_button("下载颜色 JSON", json_bytes, file_name=f"{slugify(result['job_label'])}_report.json", mime="application/json", use_container_width=True)
 
@@ -1800,15 +1803,17 @@ def render_candidate_gallery(result: dict[str, Any]) -> None:
     if not combos:
         return
     st.markdown("**参考模特图**")
-    ref_cols = st.columns(max(1, len(result["targets"])))
-    for idx, target in enumerate(result["targets"]):
+    ref_layout = [0.6] + [1.0] * max(1, len(result["targets"])) + [0.6]
+    ref_cols = st.columns(ref_layout)
+    for idx, target in enumerate(result["targets"], start=1):
         with ref_cols[idx]:
             st.image(cv2.cvtColor(thumbnail_for_ui(target["image_bgr"], 170, 190), cv2.COLOR_BGR2RGB), caption=target["label"], use_container_width=False)
     st.markdown("**最佳候选**")
-    cols = st.columns(max(1, len(combos)))
-    for idx, combo in enumerate(combos):
+    combo_layout = [0.45] + [1.0] * len(combos) + [0.45]
+    cols = st.columns(combo_layout)
+    for idx, combo in enumerate(combos, start=1):
         with cols[idx]:
-            st.image(cv2.cvtColor(thumbnail_for_ui(combo["image"], 180, 230), cv2.COLOR_BGR2RGB), caption=f"候选 {idx + 1}", use_container_width=False)
+            st.image(cv2.cvtColor(thumbnail_for_ui(combo["image"], 168, 218), cv2.COLOR_BGR2RGB), caption=f"候选 {idx}", use_container_width=False)
             st.caption(f"DeltaE {combo['de']:.2f}")
 
 
