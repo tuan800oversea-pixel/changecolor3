@@ -1524,6 +1524,7 @@ def build_job_inputs(
         )
     combos = build_result_combinations(orig_bgr, regions, top_n=top_n)
     payload = build_result_payload(job_label, targets, regions, combos)
+    html = build_result_html(job_label, orig_bgr, targets, combos) if combos else ""
     return {
         "job_label": job_label,
         "orig_bgr": orig_bgr,
@@ -1531,7 +1532,7 @@ def build_job_inputs(
         "regions": regions,
         "combos": combos,
         "payload": payload,
-        "html": "",
+        "html": html,
         "psd_bytes": b"",
     }
 
@@ -1753,29 +1754,37 @@ def render_result_downloads(result: dict[str, Any]) -> None:
     best = result["combos"][0]
     jpg_bytes = image_to_bytes(best["image"], ".jpg", [int(cv2.IMWRITE_JPEG_QUALITY), 96])
     json_bytes = json.dumps(result["payload"], ensure_ascii=False, indent=2).encode("utf-8")
-    basic_html = result.get("html") or build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
-    basic_zip_bytes = build_export_zip({**result, "html": basic_html, "psd_bytes": result.get("psd_bytes") or b""})
+    basic_export_state_key = f"stable_basic_exports::{result['job_label']}"
+    basic_export_state = st.session_state.get(basic_export_state_key)
+    if basic_export_state is None:
+        basic_html = result.get("html") or build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
+        basic_zip_bytes = build_export_zip({**result, "html": basic_html, "psd_bytes": result.get("psd_bytes") or b""})
+        basic_export_state = {
+            "html_bytes": basic_html.encode("utf-8"),
+            "zip_bytes": basic_zip_bytes,
+        }
+        st.session_state[basic_export_state_key] = basic_export_state
     export_state_key = f"stable_advanced_exports::{result['job_label']}"
     export_state = st.session_state.get(export_state_key)
 
     cols = st.columns(5)
     with cols[0]:
-        st.download_button("下载最佳 JPG", jpg_bytes, file_name=f"{slugify(result['job_label'])}_best.jpg", mime="image/jpeg", use_container_width=True)
+        st.download_button("下载最佳 JPG", jpg_bytes, file_name=f"{slugify(result['job_label'])}_best.jpg", mime="image/jpeg", use_container_width=True, key=f"download_jpg_{slugify(result['job_label'])}")
     with cols[1]:
         if export_state:
             st.download_button("下载分层 PSD", export_state["psd_bytes"], file_name=f"{slugify(result['job_label'])}_best.psd", mime="image/vnd.adobe.photoshop", use_container_width=True)
         else:
             st.button("下载分层 PSD", disabled=True, use_container_width=True, key=f"disabled_psd_{slugify(result['job_label'])}")
     with cols[2]:
-        zip_bytes = export_state["zip_bytes"] if export_state else basic_zip_bytes
-        st.download_button("下载导出包 ZIP", zip_bytes, file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True)
+        zip_bytes = export_state["zip_bytes"] if export_state else basic_export_state["zip_bytes"]
+        st.download_button("下载导出包 ZIP", zip_bytes, file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True, key=f"download_zip_{slugify(result['job_label'])}")
     with cols[3]:
         if export_state:
-            st.download_button("下载报告 HTML", export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True)
+            st.download_button("下载报告 HTML", export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True, key=f"download_html_advanced_{slugify(result['job_label'])}")
         else:
-            st.download_button("下载报告 HTML", basic_html.encode("utf-8"), file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True)
+            st.download_button("下载报告 HTML", basic_export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True, key=f"download_html_basic_{slugify(result['job_label'])}")
     with cols[4]:
-        st.download_button("下载颜色 JSON", json_bytes, file_name=f"{slugify(result['job_label'])}_report.json", mime="application/json", use_container_width=True)
+        st.download_button("下载颜色 JSON", json_bytes, file_name=f"{slugify(result['job_label'])}_report.json", mime="application/json", use_container_width=True, key=f"download_json_{slugify(result['job_label'])}")
 
     with st.expander("准备高级导出（PSD / ZIP / HTML）", expanded=export_state is None):
         if export_state is None:
@@ -1803,17 +1812,17 @@ def render_candidate_gallery(result: dict[str, Any]) -> None:
     if not combos:
         return
     st.markdown("**参考模特图**")
-    ref_layout = [0.6] + [1.0] * max(1, len(result["targets"])) + [0.6]
+    ref_layout = [1.2] + [0.95] * max(1, len(result["targets"])) + [1.2]
     ref_cols = st.columns(ref_layout)
     for idx, target in enumerate(result["targets"], start=1):
         with ref_cols[idx]:
-            st.image(cv2.cvtColor(thumbnail_for_ui(target["image_bgr"], 170, 190), cv2.COLOR_BGR2RGB), caption=target["label"], use_container_width=False)
+            st.image(thumbnail_for_ui(target["image_bgr"], 170, 190), caption=target["label"], channels="BGR", width=170, output_format="JPEG")
     st.markdown("**最佳候选**")
-    combo_layout = [0.45] + [1.0] * len(combos) + [0.45]
+    combo_layout = [1.0] + [0.9] * len(combos) + [1.0]
     cols = st.columns(combo_layout)
     for idx, combo in enumerate(combos, start=1):
         with cols[idx]:
-            st.image(cv2.cvtColor(thumbnail_for_ui(combo["image"], 168, 218), cv2.COLOR_BGR2RGB), caption=f"候选 {idx}", use_container_width=False)
+            st.image(thumbnail_for_ui(combo["image"], 168, 218), caption=f"候选 {idx}", channels="BGR", width=168, output_format="JPEG")
             st.caption(f"DeltaE {combo['de']:.2f}")
 
 
