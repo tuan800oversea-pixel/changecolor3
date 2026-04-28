@@ -1747,7 +1747,7 @@ def render_color_summary(targets: list[dict[str, Any]]) -> None:
 
 def render_result_downloads(result: dict[str, Any]) -> None:
     if not result["combos"]:
-        st.warning("????????????????????")
+        st.warning("当前没有可下载的候选结果。")
         return
 
     best = result["combos"][0]
@@ -1758,29 +1758,29 @@ def render_result_downloads(result: dict[str, Any]) -> None:
 
     cols = st.columns(5)
     with cols[0]:
-        st.download_button("???? JPG", jpg_bytes, file_name=f"{slugify(result['job_label'])}_best.jpg", mime="image/jpeg", use_container_width=True)
+        st.download_button("下载最佳 JPG", jpg_bytes, file_name=f"{slugify(result['job_label'])}_best.jpg", mime="image/jpeg", use_container_width=True)
     with cols[1]:
         if export_state:
-            st.download_button("???? PSD", export_state["psd_bytes"], file_name=f"{slugify(result['job_label'])}_best.psd", mime="image/vnd.adobe.photoshop", use_container_width=True)
+            st.download_button("下载分层 PSD", export_state["psd_bytes"], file_name=f"{slugify(result['job_label'])}_best.psd", mime="image/vnd.adobe.photoshop", use_container_width=True)
         else:
-            st.button("???? PSD", disabled=True, use_container_width=True, key=f"disabled_psd_{slugify(result['job_label'])}")
+            st.button("下载分层 PSD", disabled=True, use_container_width=True, key=f"disabled_psd_{slugify(result['job_label'])}")
     with cols[2]:
         if export_state:
-            st.download_button("????? ZIP", export_state["zip_bytes"], file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True)
+            st.download_button("下载导出包 ZIP", export_state["zip_bytes"], file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True)
         else:
-            st.button("????? ZIP", disabled=True, use_container_width=True, key=f"disabled_zip_{slugify(result['job_label'])}")
+            st.button("下载导出包 ZIP", disabled=True, use_container_width=True, key=f"disabled_zip_{slugify(result['job_label'])}")
     with cols[3]:
         if export_state:
-            st.download_button("???? HTML", export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True)
+            st.download_button("下载报告 HTML", export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True)
         else:
-            st.button("???? HTML", disabled=True, use_container_width=True, key=f"disabled_html_{slugify(result['job_label'])}")
+            st.button("下载报告 HTML", disabled=True, use_container_width=True, key=f"disabled_html_{slugify(result['job_label'])}")
     with cols[4]:
-        st.download_button("???? JSON", json_bytes, file_name=f"{slugify(result['job_label'])}_report.json", mime="application/json", use_container_width=True)
+        st.download_button("下载颜色 JSON", json_bytes, file_name=f"{slugify(result['job_label'])}_report.json", mime="application/json", use_container_width=True)
 
-    with st.expander("???????PSD / ZIP / HTML?", expanded=export_state is None):
+    with st.expander("准备高级导出（PSD / ZIP / HTML）", expanded=export_state is None):
         if export_state is None:
-            if st.button("??????", key=f"prepare_advanced_exports_{slugify(result['job_label'])}", use_container_width=True):
-                with st.spinner("???????????????????????..."):
+            if st.button("生成高级导出文件", key=f"prepare_advanced_exports_{slugify(result['job_label'])}", use_container_width=True):
+                with st.spinner("正在准备高级导出文件，这一步会更慢，也更吃内存..."):
                     html = build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
                     psd_bytes = create_layered_psd_bytes(result["job_label"], result["orig_bgr"], result["combos"][0], result["targets"], result["regions"])
                     advanced_result = {**result, "html": html, "psd_bytes": psd_bytes}
@@ -1792,45 +1792,47 @@ def render_result_downloads(result: dict[str, Any]) -> None:
                 }
                 st.rerun()
         else:
-            st.success("???????????????????")
+            st.success("高级导出文件已经准备好，可以直接下载。")
+
 
 def render_candidate_gallery(result: dict[str, Any]) -> None:
     combos = result["combos"][:STREAMLIT_SAFE_TOP_N]
     if not combos:
         return
-    st.markdown("**?????**")
+    st.markdown("**参考模特图**")
     ref_cols = st.columns(max(1, len(result["targets"])))
     for idx, target in enumerate(result["targets"]):
         with ref_cols[idx]:
             st.image(cv2.cvtColor(thumbnail_for_ui(target["image_bgr"], 170, 190), cv2.COLOR_BGR2RGB), caption=target["label"], use_container_width=False)
-    st.markdown("**????**")
+    st.markdown("**最佳候选**")
     cols = st.columns(max(1, len(combos)))
     for idx, combo in enumerate(combos):
         with cols[idx]:
-            st.image(cv2.cvtColor(thumbnail_for_ui(combo["image"], 180, 230), cv2.COLOR_BGR2RGB), caption=f"?? {idx + 1}", use_container_width=False)
+            st.image(cv2.cvtColor(thumbnail_for_ui(combo["image"], 180, 230), cv2.COLOR_BGR2RGB), caption=f"候选 {idx + 1}", use_container_width=False)
             st.caption(f"DeltaE {combo['de']:.2f}")
+
 
 def build_single_job_ui() -> None:
     result_state_key = "stable_last_result"
     sample_names = available_sample_names()
     has_local_samples = bool(sample_names)
     top_cols = st.columns([1.1, 1.1, 1.0, 1.0])
-    source_options = ["????", "????"] if has_local_samples else ["????"]
+    source_options = ["本地样例", "手动上传"] if has_local_samples else ["手动上传"]
     with top_cols[0]:
-        source_mode = st.radio("????", source_options, horizontal=True, label_visibility="collapsed")
+        source_mode = st.radio("输入方式", source_options, horizontal=True, label_visibility="collapsed")
 
     sample_name = "manual"
     region_count = 1
     orig_img = None
     region_sources: list[dict[str, Any]] = []
-    if source_mode == "????" and has_local_samples:
+    if source_mode == "本地样例" and has_local_samples:
         with top_cols[1]:
-            sample_name = st.selectbox("????", sample_names, label_visibility="collapsed")
+            sample_name = st.selectbox("选择样例", sample_names, label_visibility="collapsed")
         try:
             sample = discover_sample_bundle(sample_name)
         except FileNotFoundError:
-            st.warning("?????????????????????")
-            source_mode = "????"
+            st.warning("本地样例资源不存在，已切换为手动上传模式。")
+            source_mode = "手动上传"
             sample = None
         if sample is not None:
             region_count = sample["region_count"]
@@ -1838,89 +1840,89 @@ def build_single_job_ui() -> None:
             region_sources = [{"name": item["name"], "mask_source": constrain_image_for_streamlit(item["mask_source"])} for item in sample["region_sources"]]
         else:
             with top_cols[2]:
-                region_count = st.radio("????", [1, 2], horizontal=True, format_func=lambda value: "???" if value == 1 else "???", label_visibility="collapsed")
+                region_count = st.radio("套装区域数", [1, 2], horizontal=True, format_func=lambda value: "一件套" if value == 1 else "两件套", label_visibility="collapsed")
             orig_cols = st.columns(3 if region_count == 1 else 4)
             with orig_cols[0]:
-                orig_file = st.file_uploader("??", type=["jpg", "jpeg", "png"])
+                orig_file = st.file_uploader("原图", type=["jpg", "jpeg", "png"])
             orig_img = load_uploaded_image(orig_file)
             if region_count == 1:
                 with orig_cols[1]:
-                    mask_file = st.file_uploader("????", type=["jpg", "jpeg", "png"], key="stable_mask_one_fallback")
-                region_sources.append({"name": "??", "mask_source": load_uploaded_image(mask_file)})
+                    mask_file = st.file_uploader("主体蒙版", type=["jpg", "jpeg", "png"], key="stable_mask_one_fallback")
+                region_sources.append({"name": "主体", "mask_source": load_uploaded_image(mask_file)})
             else:
                 with orig_cols[1]:
-                    top_file = st.file_uploader("????", type=["jpg", "jpeg", "png"], key="stable_mask_top_fallback")
+                    top_file = st.file_uploader("上衣蒙版", type=["jpg", "jpeg", "png"], key="stable_mask_top_fallback")
                 with orig_cols[2]:
-                    bottom_file = st.file_uploader("????", type=["jpg", "jpeg", "png"], key="stable_mask_bottom_fallback")
+                    bottom_file = st.file_uploader("底裤蒙版", type=["jpg", "jpeg", "png"], key="stable_mask_bottom_fallback")
                 region_sources.extend([
-                    {"name": "??", "mask_source": load_uploaded_image(top_file)},
-                    {"name": "??", "mask_source": load_uploaded_image(bottom_file)},
+                    {"name": "上衣", "mask_source": load_uploaded_image(top_file)},
+                    {"name": "底裤", "mask_source": load_uploaded_image(bottom_file)},
                 ])
     else:
         with top_cols[1]:
-            region_count = st.radio("????", [1, 2], horizontal=True, format_func=lambda value: "???" if value == 1 else "???", label_visibility="collapsed")
+            region_count = st.radio("套装区域数", [1, 2], horizontal=True, format_func=lambda value: "一件套" if value == 1 else "两件套", label_visibility="collapsed")
         orig_cols = st.columns(3 if region_count == 1 else 4)
         with orig_cols[0]:
-            orig_file = st.file_uploader("??", type=["jpg", "jpeg", "png"])
+            orig_file = st.file_uploader("原图", type=["jpg", "jpeg", "png"])
         orig_img = load_uploaded_image(orig_file)
         if region_count == 1:
             with orig_cols[1]:
-                mask_file = st.file_uploader("????", type=["jpg", "jpeg", "png"], key="stable_mask_one")
-            region_sources.append({"name": "??", "mask_source": load_uploaded_image(mask_file)})
+                mask_file = st.file_uploader("主体蒙版", type=["jpg", "jpeg", "png"], key="stable_mask_one")
+            region_sources.append({"name": "主体", "mask_source": load_uploaded_image(mask_file)})
         else:
             with orig_cols[1]:
-                top_file = st.file_uploader("????", type=["jpg", "jpeg", "png"], key="stable_mask_top")
+                top_file = st.file_uploader("上衣蒙版", type=["jpg", "jpeg", "png"], key="stable_mask_top")
             with orig_cols[2]:
-                bottom_file = st.file_uploader("????", type=["jpg", "jpeg", "png"], key="stable_mask_bottom")
+                bottom_file = st.file_uploader("底裤蒙版", type=["jpg", "jpeg", "png"], key="stable_mask_bottom")
             region_sources.extend([
-                {"name": "??", "mask_source": load_uploaded_image(top_file)},
-                {"name": "??", "mask_source": load_uploaded_image(bottom_file)},
+                {"name": "上衣", "mask_source": load_uploaded_image(top_file)},
+                {"name": "底裤", "mask_source": load_uploaded_image(bottom_file)},
             ])
 
     color_count = 1
     if region_count != 1:
         with top_cols[2]:
-            color_count = st.radio("????", [1, 2], horizontal=True, format_func=lambda value: "????" if value == 1 else "????", label_visibility="collapsed")
-    ref_paths = list_reference_paths() if source_mode == "????" else []
+            color_count = st.radio("调色数量", [1, 2], horizontal=True, format_func=lambda value: "同一颜色" if value == 1 else "两个颜色", label_visibility="collapsed")
+    ref_paths = list_reference_paths() if source_mode == "本地样例" else []
     ref_inputs: list[dict[str, Any]] = []
     ref_name_map = {path.name: path for path in ref_paths}
     ref_name_options = list(ref_name_map.keys())
-    if source_mode == "????" and not ref_paths:
-        source_mode = "????"
+    if source_mode == "本地样例" and not ref_paths:
+        source_mode = "手动上传"
     ref_cols = st.columns(color_count if color_count > 0 else 1)
     for idx in range(color_count):
-        label_default = f"?? {idx + 1}"
+        label_default = f"颜色 {idx + 1}"
         with ref_cols[idx]:
             st.markdown(f"**{label_default}**")
-            if source_mode == "????" and ref_name_options:
+            if source_mode == "本地样例" and ref_name_options:
                 default_index = min(idx, len(ref_name_options) - 1)
-                validation_name = st.selectbox(f"{label_default} ???", ref_name_options, index=default_index, key=f"stable_validation_ref_{idx}")
+                validation_name = st.selectbox(f"{label_default} 校验图", ref_name_options, index=default_index, key=f"stable_validation_ref_{idx}")
                 validation_path = ref_name_map[validation_name]
                 validation_image = constrain_image_for_streamlit(read_image_path(validation_path))
                 label = validation_path.stem
             else:
-                validation_file = st.file_uploader(f"{label_default} ???", type=["jpg", "jpeg", "png"], key=f"stable_validation_upload_{idx}")
+                validation_file = st.file_uploader(f"{label_default} 校验图", type=["jpg", "jpeg", "png"], key=f"stable_validation_upload_{idx}")
                 validation_image = load_uploaded_image(validation_file)
                 label = Path(validation_file.name).stem if validation_file is not None else label_default
-            render_file = st.file_uploader(f"{label_default} ???", type=["jpg", "jpeg", "png"], key=f"stable_render_upload_{idx}")
+            render_file = st.file_uploader(f"{label_default} 色块图", type=["jpg", "jpeg", "png"], key=f"stable_render_upload_{idx}")
             render_image = load_uploaded_image(render_file)
             ref_inputs.append({"label": label, "validation_image": validation_image, "render_image": render_image})
 
     region_map = [0] if region_count == 1 else ([0, 0] if color_count == 1 else [0, 1])
-    if st.button("???????????", use_container_width=True):
+    if st.button("开始调色（云端稳态版）", use_container_width=True):
         if orig_img is None:
-            st.error("???????")
+            st.error("请先提供原图。")
             return
         if any(item["mask_source"] is None for item in region_sources):
-            st.error("?????????????????")
+            st.error("请先提供所有区域的蒙版或对齐白底图。")
             return
         if any(item["validation_image"] is None for item in ref_inputs):
-            st.error("????????????????")
+            st.error("请先提供每个颜色的带模特校验图。")
             return
-        st.info("????????????????????????????????")
-        with st.spinner("???????????..."):
+        st.info("当前版本优先保证云端稳定：默认更少候选，且高级导出改为按需生成。")
+        with st.spinner("正在生成更稳的候选结果..."):
             result = build_job_inputs(
-                "??????" if source_mode == "????" else f"{sample_name}_????",
+                "手动调色任务" if source_mode == "手动上传" else f"{sample_name}_调色任务",
                 orig_img,
                 region_sources,
                 ref_inputs,
@@ -1930,15 +1932,16 @@ def build_single_job_ui() -> None:
         st.session_state[result_state_key] = result
     result = st.session_state.get(result_state_key)
     if result and result.get("combos"):
-        st.success(f"??????? {len(result['combos'])} ??????")
+        st.success(f"已完成，共生成 {len(result['combos'])} 组候选结果。")
         render_result_downloads(result)
         render_candidate_gallery(result)
 
+
 def main() -> None:
-    st.set_page_config(page_title="???????? - ?????", layout="wide")
+    st.set_page_config(page_title="智能泳衣调色工具 - 云端稳态版", layout="wide")
     inject_css()
-    st.title("???????? - ?????")
-    st.caption("???????? Streamlit Cloud ???????????????????????????")
+    st.title("智能泳衣调色工具 - 云端稳态版")
+    st.caption("这个版本优先减少 Streamlit Cloud 的内存压力：默认更少候选、预览优先、高级导出按需生成。")
     build_single_job_ui()
 
 if __name__ == "__main__":
