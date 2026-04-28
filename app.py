@@ -1386,12 +1386,17 @@ def cleanup_legacy_pngs(folder: Path) -> None:
 def build_export_zip(result: dict[str, Any]) -> bytes:
     if not result["combos"]:
         return b""
-    best = result["combos"][0]
     html_text = result.get("html") or build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
     psd_bytes = result.get("psd_bytes") or b""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         base = slugify(result["job_label"])
+        for idx, combo in enumerate(result["combos"], start=1):
+            zf.writestr(
+                f"{base}/candidates/candidate_{idx}.jpg",
+                image_to_bytes(combo["image"], ".jpg", [int(cv2.IMWRITE_JPEG_QUALITY), 96]),
+            )
+        best = result["combos"][0]
         zf.writestr(
             f"{base}/best.jpg",
             image_to_bytes(best["image"], ".jpg", [int(cv2.IMWRITE_JPEG_QUALITY), 100]),
@@ -1767,44 +1772,35 @@ def render_result_downloads(result: dict[str, Any]) -> None:
     export_state_key = f"stable_advanced_exports::{result['job_label']}"
     export_state = st.session_state.get(export_state_key)
 
-    cols = st.columns(5)
+    cols = st.columns(3)
     with cols[0]:
         st.download_button("下载最佳 JPG", jpg_bytes, file_name=f"{slugify(result['job_label'])}_best.jpg", mime="image/jpeg", use_container_width=True, key=f"download_jpg_{slugify(result['job_label'])}")
     with cols[1]:
-        if export_state:
-            st.download_button("下载分层 PSD", export_state["psd_bytes"], file_name=f"{slugify(result['job_label'])}_best.psd", mime="image/vnd.adobe.photoshop", use_container_width=True)
-        else:
-            st.button("下载分层 PSD", disabled=True, use_container_width=True, key=f"disabled_psd_{slugify(result['job_label'])}")
-    with cols[2]:
         zip_bytes = export_state["zip_bytes"] if export_state else basic_export_state["zip_bytes"]
-        st.download_button("下载导出包 ZIP", zip_bytes, file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True, key=f"download_zip_{slugify(result['job_label'])}")
-    with cols[3]:
         if export_state:
-            st.download_button("下载报告 HTML", export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True, key=f"download_html_advanced_{slugify(result['job_label'])}")
+            zip_label = "下载全部候选 ZIP（含 PSD）"
         else:
-            st.download_button("下载报告 HTML", basic_export_state["html_bytes"], file_name=f"{slugify(result['job_label'])}_report.html", mime="text/html", use_container_width=True, key=f"download_html_basic_{slugify(result['job_label'])}")
-    with cols[4]:
-        st.download_button("下载颜色 JSON", json_bytes, file_name=f"{slugify(result['job_label'])}_report.json", mime="application/json", use_container_width=True, key=f"download_json_{slugify(result['job_label'])}")
-
-    with st.expander("准备高级导出（PSD / ZIP / HTML）", expanded=export_state is None):
-        if export_state is None:
-            if st.button("生成高级导出文件", key=f"prepare_advanced_exports_{slugify(result['job_label'])}", use_container_width=True):
+            zip_label = "下载全部候选 ZIP"
+        st.download_button(zip_label, zip_bytes, file_name=f"{slugify(result['job_label'])}_export.zip", mime="application/zip", use_container_width=True, key=f"download_zip_{slugify(result['job_label'])}")
+    with cols[2]:
+        if export_state:
+            st.download_button("下载分层 PSD", export_state["psd_bytes"], file_name=f"{slugify(result['job_label'])}_best.psd", mime="image/vnd.adobe.photoshop", use_container_width=True, key=f"download_psd_{slugify(result['job_label'])}")
+        else:
+            if st.button("生成分层 PSD", key=f"prepare_psd_{slugify(result['job_label'])}", use_container_width=True):
                 try:
-                    with st.spinner("正在准备高级导出文件，这一步会更慢，也更吃内存..."):
-                        html = build_result_html(result["job_label"], result["orig_bgr"], result["targets"], result["combos"])
+                    with st.spinner("正在生成 PSD，这一步会更慢，也更吃内存..."):
+                        html = basic_export_state["html_bytes"].decode("utf-8")
                         psd_bytes = create_layered_psd_bytes(result["job_label"], result["orig_bgr"], result["combos"][0], result["targets"], result["regions"])
                         advanced_result = {**result, "html": html, "psd_bytes": psd_bytes}
                         zip_bytes = build_export_zip(advanced_result)
                     st.session_state[export_state_key] = {
-                        "html_bytes": html.encode("utf-8"),
+                        "html_bytes": basic_export_state["html_bytes"],
                         "psd_bytes": psd_bytes,
                         "zip_bytes": zip_bytes,
                     }
                     st.rerun()
                 except Exception as exc:
-                    st.error(f"高级导出生成失败：{exc}")
-        else:
-            st.success("高级导出文件已经准备好，可以直接下载。")
+                    st.warning(f"当前环境还不能生成 PSD：{exc}")
 
 
 def render_candidate_gallery(result: dict[str, Any]) -> None:
